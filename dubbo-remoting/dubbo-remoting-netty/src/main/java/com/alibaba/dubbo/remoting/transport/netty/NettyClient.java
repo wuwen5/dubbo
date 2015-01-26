@@ -54,7 +54,22 @@ public class NettyClient extends AbstractClient {
     private static final ChannelFactory channelFactory = new NioClientSocketChannelFactory(Executors.newCachedThreadPool(new NamedThreadFactory("NettyClientBoss", true)), 
                                                                                            Executors.newCachedThreadPool(new NamedThreadFactory("NettyClientWorker", true)), 
                                                                                            Constants.DEFAULT_IO_THREADS);
-    protected static final AtomicInteger CLIENT_COUNTER = new AtomicInteger();
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            public void run() {
+                if (logger.isInfoEnabled()) {
+                    logger.info("Run shutdown hook now.");
+                }
+
+                try {
+                    channelFactory.releaseExternalResources();
+                } catch (Throwable t) {
+                    logger.warn(t.getMessage());
+                }
+            }
+        }, "DubboShutdownHook-NettyClient"));
+    }
 
     private ClientBootstrap bootstrap;
 
@@ -66,8 +81,6 @@ public class NettyClient extends AbstractClient {
     
     @Override
     protected void doOpen() throws Throwable {
-
-        CLIENT_COUNTER.getAndIncrement();
 
         NettyHelper.setNettyLoggerFactory();
         bootstrap = new ClientBootstrap(channelFactory);
@@ -153,15 +166,12 @@ public class NettyClient extends AbstractClient {
     
     @Override
     protected void doClose() throws Throwable {
+        /**try {
+            bootstrap.releaseExternalResources();
+        } catch (Throwable t) {
+            logger.warn(t.getMessage());
+        }*/
 
-        //当所有client实例都close则释放连接
-        if (CLIENT_COUNTER.decrementAndGet() <= 0 ) {
-            try {
-                bootstrap.releaseExternalResources();
-            } catch (Throwable t) {
-                logger.warn(t.getMessage());
-            }
-        }
     }
 
     @Override
