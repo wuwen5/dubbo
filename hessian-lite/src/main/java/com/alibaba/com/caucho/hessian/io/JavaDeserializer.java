@@ -54,6 +54,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.EnumSet;
 import java.util.HashMap;
 
 import java.util.logging.*;
@@ -152,6 +153,10 @@ public class JavaDeserializer extends AbstractMapDeserializer {
     throws IOException
   {
     try {
+      if (_type.getName().equals("java.util.EnumSet$SerializationProxy")) {
+        return readEnumSet(in, Enum.class);
+      }
+
       Object obj = instantiate();
 
       return readObject(in, obj, fieldNames);
@@ -675,5 +680,21 @@ public class JavaDeserializer extends AbstractMapDeserializer {
 				      + " cannot be assigned to '" + field.getType().getName() + "'", e);
     else
        throw new HessianFieldException(fieldName + ": " + field.getType().getName() + " cannot be assigned from null", e);
+  }
+
+  private static class EnumSetSerializationProxy<E extends Enum<E>> {
+    Object elementType;
+    Object[] elements;
+  }
+
+  private <E extends Enum<E>> EnumSet<E> readEnumSet(AbstractHessianInput in, Class<E> klass) throws IOException {
+    EnumSetSerializationProxy<E> essp = new EnumSetSerializationProxy<E>();
+    in.addRef(essp);
+    essp.elementType = in.readObject();
+    essp.elements = (Object[])in.readObject();
+    EnumSet<E> obj = EnumSet.noneOf((Class<E>)essp.elementType);
+    for (Object element : essp.elements)
+      obj.add((E)element);
+     return obj;
   }
 }
