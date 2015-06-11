@@ -176,9 +176,7 @@ class J2oVisitor implements JSONVisitor
                     } catch (IllegalAccessException e) {
                         throw new ParseException(StringUtils.toString(e));
                     }
-                } else if (mValue instanceof Throwable && "suppressed".equals(name)) { // modified by lishen
-                     // simply ignore this field for jdk 1.7+
-				} else if (! CLASS_PROPERTY.equals(name)) {
+                } else if (! CLASS_PROPERTY.equals(name)) {
 					mWrapper.setPropertyValue(mValue, name, obj);
 				}
 			}
