@@ -243,7 +243,9 @@ public class ServiceDiscoveryRegistry extends FailbackRegistry {
         serviceDiscovery.unsubscribe(url, listener);
         String protocolServiceKey = url.getProtocolServiceKey();
         Set<String> serviceNames = serviceNameMapping.getCachedMapping(url);
-        serviceNameMapping.stopListen(url, mappingListeners.remove(protocolServiceKey));
+        if (mappingListeners.get(protocolServiceKey) != null) {
+            serviceNameMapping.stopListen(url, mappingListeners.remove(protocolServiceKey));
+        }
         if (CollectionUtils.isNotEmpty(serviceNames)) {
             String serviceNamesKey = toStringKeys(serviceNames);
             Lock appSubscriptionLock = getAppSubscription(serviceNamesKey);
