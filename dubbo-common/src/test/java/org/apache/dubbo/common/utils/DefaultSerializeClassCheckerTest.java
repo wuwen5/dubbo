@@ -59,10 +59,15 @@ class DefaultSerializeClassCheckerTest {
             defaultSerializeClassChecker.loadClass(Thread.currentThread().getContextClassLoader(), int.class.getName());
         }
 
-        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+        Assertions.assertDoesNotThrow(() -> {
             defaultSerializeClassChecker.loadClass(
                     Thread.currentThread().getContextClassLoader(), Socket.class.getName());
         });
+        Assertions.assertNotEquals(
+                Socket.class,
+                defaultSerializeClassChecker.loadClass(
+                        Thread.currentThread().getContextClassLoader(), Socket.class.getName()));
+
         Assertions.assertTrue(FrameworkModel.defaultModel()
                 .getBeanFactory()
                 .getBean(SerializeSecurityManager.class)
@@ -171,7 +176,7 @@ class DefaultSerializeClassCheckerTest {
                 defaultSerializeClassChecker.loadClass(
                         Thread.currentThread().getContextClassLoader(), ReentrantReadWriteLock.class.getName()));
 
-        Assertions.assertEquals(
+        Assertions.assertNotEquals(
                 Level.class,
                 defaultSerializeClassChecker.loadClass(
                         Thread.currentThread().getContextClassLoader(), Level.class.getName()));

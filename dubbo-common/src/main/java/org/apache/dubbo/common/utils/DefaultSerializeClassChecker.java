@@ -164,6 +164,8 @@ public class DefaultSerializeClassChecker implements AllowClassNotifyListener {
                 if (serializeSecurityManager.getWarnedClasses().add(className)) {
                     logger.warn(PROTOCOL_UNTRUSTED_SERIALIZE_CLASS, "", "", msg);
                 }
+
+                return DenyClass.class;
             }
         }
 
@@ -183,6 +185,8 @@ public class DefaultSerializeClassChecker implements AllowClassNotifyListener {
                 if (serializeSecurityManager.getWarnedClasses().add(className)) {
                     logger.warn(PROTOCOL_UNTRUSTED_SERIALIZE_CLASS, "", "", msg);
                 }
+
+                return DenyClass.class;
             }
         }
 
@@ -202,6 +206,10 @@ public class DefaultSerializeClassChecker implements AllowClassNotifyListener {
 
     public static DefaultSerializeClassChecker getInstance() {
         return FrameworkModel.defaultModel().getBeanFactory().getBean(DefaultSerializeClassChecker.class);
+    }
+
+    private static class DenyClass implements Serializable {
+        // To indicate that the target class has been reject
     }
 
     public boolean isCheckSerializable() {
