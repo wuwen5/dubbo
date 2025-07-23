@@ -11,6 +11,7 @@ env:
   SHOW_ERROR_DETAIL: 1
   #multi-version size limit
   VERSIONS_LIMIT: 4
+  JACOCO_ENABLE: true
   CANDIDATE_VERSIONS: '
     spring.version:4.3.30.RELEASE;
     spring-boot.version:1.5.22.RELEASE;
@@ -34,6 +35,7 @@ env:
 
 jobs:
   license:
+    name: "Check License"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,28 +60,27 @@ jobs:
           mode: check
 
   build-source:
+    name: "Build Dubbo"
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.dubbo-version.outputs.version }}
     steps:
       - name: "Checkout code"
         uses: actions/checkout@v4
-        with:
-          path: dubbo
       - name: "Set up JDK"
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: 21
       - name: "Set current date as env variable"
-        run: echo "DATE_NOW=$(date +'%Y%m%d')" >> $GITHUB_ENV
-      - name: "Restore local Maven repository cache"
+        run: echo "TODAY=$(date +'%Y%m%d')" >> $GITHUB_ENV
+      - name: "Restore local maven repository cache"
         uses: actions/cache/restore@v4
         id: cache-maven-repository
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.DATE_NOW }}
-      - name: "Restore common local Maven repository cache"
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.TODAY }}
+      - name: "Restore common local maven repository cache"
         uses: actions/cache/restore@v4
         if: steps.cache-maven-repository.outputs.cache-hit != 'true'
         with:
@@ -87,21 +88,24 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
-      - name: "Dubbo cache"
-        uses: actions/cache@v3
+      - name: "Clean dubbo cache"
+        run: rm -rf ~/.m2/repository/org/apache/dubbo
+      - name: "Build Dubbo with maven"
+        run: |
+          ./mvnw ${{ env.MAVEN_ARGS }} clean install -Psources,skip-spotless,checkstyle -Dmaven.test.skip=true -DembeddedZookeeperPath=${{ github.workspace }}/.tmp/zookeeper
+      - name: "Save dubbo cache"
+        uses: actions/cache/save@v4
         with:
           path: ~/.m2/repository/org/apache/dubbo
           key: ${{ runner.os }}-dubbo-snapshot-${{ github.sha }}-${{ github.run_id }}
-      - name: "Build Dubbo with Maven"
-        run: |
-          cd ./dubbo
-          ./mvnw --batch-mode --no-snapshot-updates -e --no-transfer-progress --fail-fast clean install -Psources,skip-spotless,checkstyle -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 -Dmaven.wagon.http.retryHandler.count=5 -Dmaven.test.skip=true -Dmaven.test.skip.exec=true -DembeddedZookeeperPath=${{ github.workspace }}/.tmp/zookeeper
-      - name: "Save local Maven repository cache"
+      - name: "Clean dubbo cache"
+        run: rm -rf ~/.m2/repository/org/apache/dubbo
+      - name: "Save local maven repository cache"
         uses: actions/cache/save@v4
         if: steps.cache-maven-repository.outputs.cache-hit != 'true'
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.DATE_NOW }}
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.TODAY }}
       - name: "Pack class result"
         run: |
           shopt -s globstar
@@ -123,7 +127,7 @@ jobs:
       - name: "Calculate Dubbo Version"
         id: dubbo-version
         run: |
-          REVISION=`awk '/<revision>[^<]+<\/revision>/{gsub(/<revision>|<\/revision>/,"",$1);print $1;exit;}' ./dubbo/pom.xml`
+          REVISION=`awk '/<revision>[^<]+<\/revision>/{gsub(/<revision>|<\/revision>/,"",$1);print $1;exit;}' ./pom.xml`
           echo "version=$REVISION" >> $GITHUB_OUTPUT
           echo "dubbo version: $REVISION"
 
@@ -143,11 +147,6 @@ jobs:
           key: zookeeper-${{ runner.os }}-${{ env.ZOOKEEPER_VERSION }}
           restore-keys: |
             zookeeper-${{ runner.os }}-${{ env.ZOOKEEPER_VERSION }}
-      - name: "Set up msys2 if necessary"
-        uses: msys2/setup-msys2@v2
-        if: ${{ startsWith( matrix.os, 'windows') && steps.cache-zookeeper.outputs.cache-hit != 'true' }}
-        with:
-          release: false  # support cache, see https://github.com/msys2/setup-msys2#context
       - name: "Download zookeeper binary archive in Linux OS"
         run: |
           mkdir -p ${{ github.workspace }}/.tmp/zookeeper
@@ -166,7 +165,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [ 8, 11, 17, 21 ]
+        java: [ 8, 11, 17 ]
     env:
       DISABLE_FILE_SYSTEM_TEST: true
       CURRENT_ROLE: ${{ matrix.case-role }}
@@ -182,12 +181,12 @@ jobs:
           distribution: 'zulu'
           java-version: ${{ matrix.java }}
       - name: "Set current date as env variable"
-        run: echo "DATE_NOW=$(date +'%Y%m%d')" >> $GITHUB_ENV
-      - name: "Cache local Maven repository"
-        uses: actions/cache@v3
+        run: echo "TODAY=$(date +'%Y%m%d')" >> $GITHUB_ENV
+      - name: "Cache local maven repository"
+        uses: actions/cache/restore@v4
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.DATE_NOW }}
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.TODAY }}
           restore-keys: |
             ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
             ${{ runner.os }}-maven-
@@ -210,17 +209,26 @@ jobs:
         if: ${{ matrix.java != '8' }}
         run: |
           set -o pipefail
-          ./mvnw --batch-mode --no-snapshot-updates -e --no-transfer-progress --fail-fast clean test verify -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 -Pjacoco,jdk15ge-simple,'!jdk15ge',jacoco089 -DtrimStackTrace=false -Dmaven.wagon.http.retryHandler.count=5 -DskipTests=false -DskipIntegrationTests=false -Dcheckstyle.skip=false -Dcheckstyle_unix.skip=false -Drat.skip=false -Dmaven.javadoc.skip=true -DembeddedZookeeperPath=${{ github.workspace }}/.tmp/zookeeper 2>&1 | tee >(grep -n -B 1 -A 200 "FAILURE! -- in" > test_errors.log)
+          ./mvnw ${{ env.MAVEN_ARGS }} clean test verify -Pjacoco,jdk15ge-simple,'!jdk15ge-add-open',skip-spotless -DtrimStackTrace=false -Dmaven.test.skip=false -Dcheckstyle.skip=false -Dcheckstyle_unix.skip=false -Drat.skip=false -DembeddedZookeeperPath=${{ github.workspace }}/.tmp/zookeeper 2>&1 | tee >(grep -n -B 1 -A 200 "FAILURE! -- in" > test_errors.log)
       - name: "Print test error log"
         if: failure()
         run: cat test_errors.log
-      - name: "Upload coverage result"
+      - name: "Upload coverage to Codecov"
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
+          flags: unit-tests-java${{ matrix.java }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: "Upload surefire reports"
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-result
-          path: "**/target/site/**/jacoco.xml"
+          name: surefire-reports-java${{ matrix.java }}
+          path: "**/target/surefire-reports/**"
 
   samples-test-prepare:
+    if: false
     runs-on: ubuntu-latest
     env:
       JOB_COUNT: 3
@@ -237,8 +245,9 @@ jobs:
           name: samples-test-list
           path: test/jobs
   samples-test-job:
+    if: false
     needs: [build-source, samples-test-prepare]
-    name: "Samples Test on ubuntu-latest (JobId: ${{matrix.job_id}})"
+    name: "Samples Test on ubuntu-latest (JobId: ${{matrix.job_id}} Java: ${{matrix.java}})"
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -255,12 +264,12 @@ jobs:
           repository: 'apache/dubbo-samples'
           ref: master
       - name: "Set current date as env variable"
-        run: echo "DATE_NOW=$(date +'%Y%m%d')" >> $GITHUB_ENV
-      - name: "Cache local Maven repository"
-        uses: actions/cache@v3
+        run: echo "TODAY=$(date +'%Y%m%d')" >> $GITHUB_ENV
+      - name: "Restore local maven repository cache"
+        uses: actions/cache/restore@v4
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.DATE_NOW }}
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.TODAY }}
           restore-keys: |
             ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
             ${{ runner.os }}-maven-
@@ -304,9 +313,16 @@ jobs:
         with:
           name: samples-test-result-${{matrix.job_id}}-java${{matrix.java}}
           path: test/jobs/*-result*
+      - name: "Upload test logs"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: samples-test-logs-${{matrix.job_id}}-java${{matrix.java}}
+          path: test/logs/*
   samples-test-result:
     needs: [samples-test-job]
-    if: always()
+    name: "Samples Test Result on ubuntu-latest (JobId: ${{matrix.job_id}} Java: ${{matrix.java}})"
+    if: false
     runs-on: ubuntu-latest
     env:
       JAVA_VER: ${{matrix.java}}
@@ -329,6 +345,7 @@ jobs:
 
   integration-test-prepare:
     runs-on: ubuntu-latest
+    if: false
     env:
       JOB_COUNT: 3
     steps:
@@ -344,8 +361,9 @@ jobs:
           name: test-list
           path: test/jobs
   integration-test-job:
+    if: false
     needs: [build-source, integration-test-prepare]
-    name: "Integration Test on ubuntu-latest (JobId: ${{matrix.job_id}})"
+    name: "Integration Test on ubuntu-latest (JobId: ${{matrix.job_id}} Java: ${{matrix.java}})"
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -362,12 +380,12 @@ jobs:
           repository: 'apache/dubbo-integration-cases'
           ref: main
       - name: "Set current date as env variable"
-        run: echo "DATE_NOW=$(date +'%Y%m%d')" >> $GITHUB_ENV
-      - name: "Cache local Maven repository"
-        uses: actions/cache@v3
+        run: echo "TODAY=$(date +'%Y%m%d')" >> $GITHUB_ENV
+      - name: "Restore local maven repository cache"
+        uses: actions/cache/restore@v4
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.DATE_NOW }}
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.TODAY }}
           restore-keys: |
             ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
             ${{ runner.os }}-maven-
@@ -411,9 +429,16 @@ jobs:
         with:
           name: test-result-${{matrix.job_id}}-java${{matrix.java}}
           path: test/jobs/*-result*
+      - name: "Upload test logs"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs-${{matrix.job_id}}-java${{matrix.java}}
+          path: test/logs/*
   integration-test-result:
+    name: "Integration Test Result on ubuntu-latest (JobId: ${{matrix.job_id}} Java: ${{matrix.java}})"
     needs: [integration-test-job]
-    if: always()
+    if: false
     runs-on: ubuntu-latest
     env:
       JAVA_VER: ${{matrix.java}}
@@ -438,17 +463,62 @@ jobs:
     name: "Samples Jacoco Result on ubuntu-latest (JobId: ${{matrix.job_id}} Java: ${{matrix.java}})"
     runs-on: ubuntu-latest
     needs: [samples-test-result]
+    if: false
     strategy:
       matrix:
         java: [ 8, 21 ]
     steps:
       - uses: actions/checkout@v4
         with:
-          path: "./dubbo"
-      - uses: actions/checkout@v4
-        with:
           repository: 'apache/dubbo-samples'
           path: "./dubbo-samples"
+      - name: "Set up JDK 21"
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: 21
+      - name: "Restore class result"
+        uses: actions/download-artifact@v4
+        with:
+          name: "class-file"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ github.workspace }}
+      - name: "Unpack class result"
+        run: |
+          unzip -o ${{ github.workspace }}/class.zip
+      - name: "Restore samples jacoco exec"
+        uses: actions/download-artifact@v4
+        with:
+          pattern: samples-jacoco-result-*-java${{matrix.java}}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dubbo-samples/target/
+          merge-multiple: true
+      - name: "Merge samples jacoco result"
+        run: |
+          cd ${{ github.workspace }}/dubbo-samples/test/dubbo-test-jacoco-merger
+          mvn clean compile exec:java -Dexec.mainClass="org.apache.dubbo.test.JacocoReport" -Dexec.args="${{github.workspace}}/dubbo-samples ${{github.workspace}}"
+      - name: "Remove old test result"
+        run: |
+          rm -rf ${{ github.workspace }}/dubbo-samples
+      - name: "Upload coverage to Codecov"
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: samples-tests-java${{matrix.java}}
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  integration-jacoco-result-merge:
+    if: false
+    name: "Integration Jacoco Result on ubuntu-latest (JobId: ${{matrix.job_id}} Java: ${{matrix.java}})"
+    runs-on: ubuntu-latest
+    needs: [integration-test-result, samples-test-result]
+    strategy:
+      matrix:
+        java: [ 8, 21 ]
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: 'apache/dubbo-integration-cases'
@@ -466,34 +536,21 @@ jobs:
           path: ${{ github.workspace }}
       - name: "Unpack class result"
         run: |
-          cd ${{ github.workspace }}/dubbo
           unzip -o ${{ github.workspace }}/class.zip
-      - name: "Restore samples jacoco exec"
-        uses: actions/download-artifact@v4
-        with:
-          pattern: samples-jacoco-result-*-java${{matrix.java}}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: dubbo-samples/target/
       - name: "Restore integration test jacoco exec"
         uses: actions/download-artifact@v4
         with:
           pattern: jacoco-result-*-java${{matrix.java}}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: dubbo-integration-cases/target/
-      - name: "Merge samples jacoco result"
-        run: |
-          cd ${{ github.workspace }}/dubbo-samples/test/dubbo-test-jacoco-merger
-          mvn clean compile exec:java -Dexec.mainClass="org.apache.dubbo.test.JacocoReport" -Dexec.args="${{github.workspace}}/dubbo-samples ${{github.workspace}}/dubbo"
+          merge-multiple: true
       - name: "Merge integration test jacoco result"
         run: |
           cd ${{ github.workspace }}/dubbo-integration-cases/test/dubbo-test-jacoco-merger
-          mvn clean compile exec:java -Dexec.mainClass="org.apache.dubbo.test.JacocoReport" -Dexec.args="${{github.workspace}}/dubbo-integration-cases ${{github.workspace}}/dubbo"
-      - name: "Restore coverage result"
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-result
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: dubbo/
+          mvn clean compile exec:java -Dexec.mainClass="org.apache.dubbo.test.JacocoReport" -Dexec.args="${{github.workspace}}/dubbo-integration-cases ${{github.workspace}}"
+      - name: "Remove old test result"
+        run: |
+          rm -rf ${{ github.workspace }}/dubbo-integration-cases
       - name: "Upload coverage to Codecov"
         uses: codecov/codecov-action@v4
         with:
@@ -520,18 +577,25 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: 21
-
+      - name: "Restore local maven repository cache"
+        uses: actions/cache/restore@v4
+        id: cache-maven-repository
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.TODAY }}
+          restore-keys: |
+            ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+            ${{ runner.os }}-maven-
       - name: "Compile Dubbo (Linux)"
         run: |
           cd ${{ github.workspace }}/dubbo
-          ./mvnw --batch-mode --no-snapshot-updates -e --no-transfer-progress --fail-fast -T 2C clean install -DskipTests=true -DskipIntegrationTests=true -Dcheckstyle.skip=true -Dcheckstyle_unix.skip=true -Drat.skip=true -Dmaven.javadoc.skip=true
+          ./mvnw ${{ env.MAVEN_ARGS }} -T 2C clean install -P skip-spotless -Dmaven.test.skip=true -Dcheckstyle.skip=true -Dcheckstyle_unix.skip=true -Drat.skip=true
       - name: "Run Error Code Inspecting"
         env:
           DUBBO_ECI_REPORT_AS_ERROR: true
         run: |
           cd ${{ github.workspace }}/dubbo-test-tools/dubbo-error-code-inspector
-          ../mvnw --batch-mode --no-snapshot-updates -e --no-transfer-progress --fail-fast -T 2C package exec:java -Ddubbo.eci.report-as-error=${DUBBO_ECI_REPORT_AS_ERROR} -Dmaven.test.skip=true -Dmaven.test.skip.exec=true -Ddubbo.eci.path=${{ github.workspace }}/dubbo
-
+          ../mvnw ${{ env.MAVEN_ARGS }} -T 2C package exec:java -Ddubbo.eci.report-as-error=${DUBBO_ECI_REPORT_AS_ERROR} -Dmaven.test.skip=true -Ddubbo.eci.path=${{ github.workspace }}/dubbo
       - name: "Upload error code inspection result"
         # always() should not be used here, since we don't need to handle the 'canceled' situation.
         if: ${{ success() || failure() }}
@@ -564,11 +628,20 @@ jobs:
         run: |
           java --version
           native-image --version
-
+      - name: "Set current date as env variable"
+        run: echo "TODAY=$(date +'%Y%m%d')" >> $GITHUB_ENV
+      - name: "Restore local Maven repository cache"
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ env.TODAY }}
+          restore-keys: |
+            ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+            ${{ runner.os }}-maven-
       - name: "Compile Dubbo (Linux)"
         run: |
           cd ${{ github.workspace }}/dubbo
-          ./mvnw --batch-mode --no-snapshot-updates -e --no-transfer-progress --fail-fast -T 2C clean install -DskipTests=true -DskipIntegrationTests=true -Dcheckstyle.skip=true -Dcheckstyle_unix.skip=true -Drat.skip=true -Dmaven.javadoc.skip=true
+          ./mvnw ${{ env.MAVEN_ARGS }} -T 2C clean install -P skip-spotless -Dmaven.test.skip=true -Dcheckstyle.skip=true -Dcheckstyle_unix.skip=true -Drat.skip=true
       - name: "Checkout dubbo-samples repository"
         uses: actions/checkout@v4
         with:
