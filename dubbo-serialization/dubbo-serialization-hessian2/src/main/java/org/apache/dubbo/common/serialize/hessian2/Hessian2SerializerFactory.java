@@ -54,7 +54,7 @@ public class Hessian2SerializerFactory extends SerializerFactory {
 
         checkSerializable(cl);
 
-        return new JavaSerializer(cl, getClassLoader());
+        return new JavaSerializer(cl);
     }
 
     @Override
@@ -68,7 +68,7 @@ public class Hessian2SerializerFactory extends SerializerFactory {
 
         checkSerializable(cl);
 
-        return new JavaDeserializer(cl);
+        return new JavaDeserializer(cl, getFieldDeserializerFactory());
     }
 
     private void checkSerializable(Class<?> cl) {
