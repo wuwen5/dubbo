@@ -396,7 +396,7 @@
 
         <!-- Hessian Lite -->
         <dependency>
-            <groupId>com.alibaba</groupId>
+            <groupId>org.apache.dubbo</groupId>
             <artifactId>hessian-lite</artifactId>
             <scope>compile</scope>
             <optional>true</optional>
@@ -474,7 +474,7 @@
                             <promoteTransitiveDependencies>false</promoteTransitiveDependencies>
                             <artifactSet>
                                 <includes>
-                                    <include>com.alibaba:hessian-lite</include>
+                                    <include>org.apache.dubbo:hessian-lite</include>
                                     <include>org.apache.dubbo:dubbo-auth</include>
                                     <include>org.apache.dubbo:dubbo-cluster</include>
                                     <include>org.apache.dubbo:dubbo-common</include>
@@ -1252,7 +1252,7 @@
                             <includeDependencySources>true</includeDependencySources>
                             <dependencySourceIncludes>
                                 <dependencySourceInclude>org.apache.dubbo:dubbo-*</dependencySourceInclude>
-                                <dependencySourceExclude>com.alibaba:hessian-*</dependencySourceExclude>
+                                <dependencySourceExclude>org.apache.dubbo:hessian-*</dependencySourceExclude>
                             </dependencySourceIncludes>
                             <show>public</show>
                             <charset>UTF-8</charset>
