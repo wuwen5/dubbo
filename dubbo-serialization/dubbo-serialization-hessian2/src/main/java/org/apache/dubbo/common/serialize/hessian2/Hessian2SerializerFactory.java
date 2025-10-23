@@ -56,7 +56,7 @@ public class Hessian2SerializerFactory extends SerializerFactory {
             throw new IllegalStateException("Serialized class " + cl.getName() + " must implement java.io.Serializable");
         }
 
-        return new JavaSerializer(cl, getClassLoader());
+        return new JavaSerializer(cl);
     }
 
     @Override
@@ -73,6 +73,6 @@ public class Hessian2SerializerFactory extends SerializerFactory {
             throw new IllegalStateException("Serialized class " + cl.getName() + " must implement java.io.Serializable");
         }
 
-        return new JavaDeserializer(cl);
+        return new JavaDeserializer(cl, getFieldDeserializerFactory());
     }
 }
