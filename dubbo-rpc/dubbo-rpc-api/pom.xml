@@ -51,7 +51,7 @@
       <artifactId>byte-buddy</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.alibaba</groupId>
+      <groupId>org.apache.dubbo</groupId>
       <artifactId>hessian-lite</artifactId>
       <scope>test</scope>
     </dependency>
