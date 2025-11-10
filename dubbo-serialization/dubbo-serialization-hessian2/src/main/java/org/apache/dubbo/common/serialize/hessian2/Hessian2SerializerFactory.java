@@ -16,6 +16,8 @@
  */
 package org.apache.dubbo.common.serialize.hessian2;
 
+import com.alibaba.com.caucho.hessian.io.UnsafeDeserializer;
+import com.alibaba.com.caucho.hessian.io.UnsafeSerializer;
 import org.apache.dubbo.common.utils.DefaultSerializeClassChecker;
 
 import com.alibaba.com.caucho.hessian.io.Deserializer;
@@ -56,7 +58,11 @@ public class Hessian2SerializerFactory extends SerializerFactory {
             throw new IllegalStateException("Serialized class " + cl.getName() + " must implement java.io.Serializable");
         }
 
-        return new JavaSerializer(cl);
+        if (isEnableUnsafeSerializer() && JavaSerializer.getWriteReplace(cl) == null) {
+            return UnsafeSerializer.create(cl);
+        } else {
+            return JavaSerializer.create(cl);
+        }
     }
 
     @Override
@@ -73,6 +79,10 @@ public class Hessian2SerializerFactory extends SerializerFactory {
             throw new IllegalStateException("Serialized class " + cl.getName() + " must implement java.io.Serializable");
         }
 
-        return new JavaDeserializer(cl, getFieldDeserializerFactory());
+        if (isEnableUnsafeSerializer()) {
+            return new UnsafeDeserializer(cl, getFieldDeserializerFactory());
+        } else {
+            return new JavaDeserializer(cl, getFieldDeserializerFactory());
+        }
     }
 }
